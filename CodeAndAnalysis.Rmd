@@ -1,10 +1,10 @@
 ---
 title: "Some Sentiments on Bernie Sanders"
 author: "Jessica Sanders"
-date: ""
+date: ''
 output:
-  word_document: default
   html_document: default
+  word_document: default
 ---
 
 ```{r}
@@ -16,129 +16,74 @@ library(lmtest)
 
 # Read in the data
 voters <- read.csv("us_public_opinion.csv")
-
 ```
 
-Placeholder text
+A
 
 ```{r}
-
-##PART 1
-
-#1) Check the data
-
-# Look at each variable in turn
-
-# Rating of Bernie Sanders:
-summary(voters$ftsanders)
-voters$ftsanders[voters$ftsanders > 100]
-
+# Check out the variables:  
+str(voters)
 ```
 
-Placeholder text
+A
 
 ```{r}
+summary(voters)
+```
 
-# Recode the spurioius values as NA
+A
+
+```{r}
+table(voters$gender)
+table(voters$race_white)
+table(voters$ideo5)
+table(voters$pid3)
+```
+
+A
+
+```{r}
+# Recode and clean values:
+# Candidate ratings that are greater than 100 recoded to NA
 voters$ftsanders[voters$ftsanders > 100] <- NA
-
-# Re-examine the variable
-summary(voters$ftsanders)
-sd(voters$ftsanders, na.rm = TRUE)
-
-```
-
-Placeholder text
-
-```{r}
-# Rating of Hillary Clinton
-summary(voters$fthrc)
-voters$fthrc[voters$fthrc > 100]
-
-```
-
-Placeholder text
-
-```{r}
-# Recode the spurioius values as NA
 voters$fthrc[voters$fthrc > 100] <- NA
 
-# Re-examine the variable
-summary(voters$fthrc)
-sd(voters$fthrc, na.rm = TRUE)
-
-```
-
-```{r}
-# Ideology:
-summary(voters$ideo5)
-
-```
-
-Placeholder text
-
-
-```{r}
-# The "I don't know" cases aren't really relevant to our analyses, 
-# and they will make the details of model specification harder,
-# so we delete them
+# The ideo5 "I don't know" cases aren't really relevant to our analyses, 
 voters$ideo5[voters$ideo5 == 6] <- NA
 voters <- voters[complete.cases(voters),]
 
 ```
 
-Placeholder text
-
-
-```{r}
-# Party Identification
-summary(voters$pid3)
-
-# Race
-summary(voters$race_white)
-
-# Gender
-summary(voters$gender)
-
-# Birthyear
-summary(voters$birthyr)
-
-```
-
-Placeholder text
-
+A
 
 ```{r}
-#2) EDA on depedent variable
-
-#a)
-
 # Plot the histogram of Bernie Sanders rating
 bernHist <- ggplot(data = voters, aes(ftsanders))
 bernHist <- bernHist + scale_x_continuous("Rating of Sanders")
 bernHist <- bernHist + ggtitle("Histogram of Bernie Sanders rating")
+bernHist <- bernHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
 
-bernHist <- bernHist + geom_histogram(color = "white", binwidth = 5)
+bernHist <- bernHist + geom_histogram(color = "white", fill = "#154360", binwidth = 5)
 bernHist
 
 ```
 
-Placeholder text
-
+A
 
 ```{r}
 # Plot the histogram of Hillary Clinton rating
 hrcHist <- ggplot(data = voters, aes(fthrc))
 hrcHist <- hrcHist + scale_x_continuous("Rating of Clinton")
 hrcHist <- hrcHist + ggtitle("Histogram of Hillary Clinton rating")
+hrcHist <- hrcHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
 
-hrcHist <- hrcHist + geom_histogram(color = "white", binwidth = 5)
+
+hrcHist <- hrcHist + geom_histogram(color = "white", fill = "#154360", binwidth = 5)
 hrcHist
 
 ```
 
-Placeholder text
-
+A
 
 ```{r}
 # Is there a relationship between the rating of Clinton and the rating of Sanders?
@@ -150,8 +95,7 @@ bernVHRC
 
 ```
 
-Placeholder text
-
+A
 
 ```{r}
 # Create a variable to be the difference between a voter's rating of Sanders and Clinton
@@ -160,35 +104,33 @@ voters$diff <- voters$ftsanders - voters$fthrc
 mean(voters$diff)
 
 # Plot the histogram of the difference variable
-diffHist <- ggplot(data = voters, aes(diff))
-diffHist <- diffHist + scale_x_continuous("Sanders - Clinton")
+diffHist <- ggplot(data = voters, aes(diff, y= ..density..))
+diffHist <- diffHist + scale_x_continuous("Point preference for Sanders")
 diffHist <- diffHist + ggtitle("Difference in rating between Sanders and Clinton")
+diffHist <- diffHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
 
-diffHist <- diffHist + geom_histogram(color = "white", binwidth = 5)
+diffHist <- diffHist + geom_histogram(color = "white", fill = "#154360", binwidth = 5)
 diffHist
 
 ```
 
-Placeholder text
-
+A
 
 ```{r}
-#3) EDA on ideology
 
 # Plot the histogram of the ideology variable
 ideoHist <- ggplot(data = voters, aes(ideo5))
-ideoHist <- ideoHist + geom_histogram(color = "white", binwidth = 1)
+ideoHist <- ideoHist + geom_histogram(color = "white", fill = "#154360", binwidth = 1)
 ideoHist <- ideoHist + ggtitle("Histogram of self identified ideology")
+ideoHist <- diffHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
 ideoHist <- ideoHist + scale_x_continuous("Ideology (1 = Very Liberal, 5 = Very conservative)")
 ideoHist
 
 ```
 
-Placeholder text
-
+A
 
 ```{r}
-#4 ) EDA on other explanatory variables
 
 # a) Create a variable for age (use 2015 because this was conducted in January 2016)
 voters$age <- 2015 - voters$birthyr
