@@ -1,0 +1,912 @@
+---
+title: "Some Sentiments on Bernie Sanders"
+author: "Jessica Sanders"
+date: ""
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r}
+#Setup the environment
+rm(list = ls())
+library(ggplot2)
+library(car)
+library(lmtest)
+
+# Read in the data
+voters <- read.csv("us_public_opinion.csv")
+
+```
+
+Placeholder text
+
+```{r}
+
+##PART 1
+
+#1) Check the data
+
+# Look at each variable in turn
+
+# Rating of Bernie Sanders:
+summary(voters$ftsanders)
+voters$ftsanders[voters$ftsanders > 100]
+
+```
+
+Placeholder text
+
+```{r}
+
+# Recode the spurioius values as NA
+voters$ftsanders[voters$ftsanders > 100] <- NA
+
+# Re-examine the variable
+summary(voters$ftsanders)
+sd(voters$ftsanders, na.rm = TRUE)
+
+```
+
+Placeholder text
+
+```{r}
+# Rating of Hillary Clinton
+summary(voters$fthrc)
+voters$fthrc[voters$fthrc > 100]
+
+```
+
+Placeholder text
+
+```{r}
+# Recode the spurioius values as NA
+voters$fthrc[voters$fthrc > 100] <- NA
+
+# Re-examine the variable
+summary(voters$fthrc)
+sd(voters$fthrc, na.rm = TRUE)
+
+```
+
+```{r}
+# Ideology:
+summary(voters$ideo5)
+
+```
+
+Placeholder text
+
+
+```{r}
+# The "I don't know" cases aren't really relevant to our analyses, 
+# and they will make the details of model specification harder,
+# so we delete them
+voters$ideo5[voters$ideo5 == 6] <- NA
+voters <- voters[complete.cases(voters),]
+
+```
+
+Placeholder text
+
+
+```{r}
+# Party Identification
+summary(voters$pid3)
+
+# Race
+summary(voters$race_white)
+
+# Gender
+summary(voters$gender)
+
+# Birthyear
+summary(voters$birthyr)
+
+```
+
+Placeholder text
+
+
+```{r}
+#2) EDA on depedent variable
+
+#a)
+
+# Plot the histogram of Bernie Sanders rating
+bernHist <- ggplot(data = voters, aes(ftsanders))
+bernHist <- bernHist + scale_x_continuous("Rating of Sanders")
+bernHist <- bernHist + ggtitle("Histogram of Bernie Sanders rating")
+
+bernHist <- bernHist + geom_histogram(color = "white", binwidth = 5)
+bernHist
+
+```
+
+Placeholder text
+
+
+```{r}
+# Plot the histogram of Hillary Clinton rating
+hrcHist <- ggplot(data = voters, aes(fthrc))
+hrcHist <- hrcHist + scale_x_continuous("Rating of Clinton")
+hrcHist <- hrcHist + ggtitle("Histogram of Hillary Clinton rating")
+
+hrcHist <- hrcHist + geom_histogram(color = "white", binwidth = 5)
+hrcHist
+
+```
+
+Placeholder text
+
+
+```{r}
+# Is there a relationship between the rating of Clinton and the rating of Sanders?
+bernVHRC <- ggplot(data = voters, aes(ftsanders, fthrc))
+bernVHRC <- bernVHRC + geom_point() + geom_smooth(method = "lm")
+bernVHRC <- bernVHRC + scale_x_continuous("Rating of Bernie Sanders")
+bernVHRC <- bernVHRC + scale_y_continuous("Rating of Hillary clinton")
+bernVHRC
+
+```
+
+Placeholder text
+
+
+```{r}
+# Create a variable to be the difference between a voter's rating of Sanders and Clinton
+voters$diff <- voters$ftsanders - voters$fthrc
+
+mean(voters$diff)
+
+# Plot the histogram of the difference variable
+diffHist <- ggplot(data = voters, aes(diff))
+diffHist <- diffHist + scale_x_continuous("Sanders - Clinton")
+diffHist <- diffHist + ggtitle("Difference in rating between Sanders and Clinton")
+
+diffHist <- diffHist + geom_histogram(color = "white", binwidth = 5)
+diffHist
+
+```
+
+Placeholder text
+
+
+```{r}
+#3) EDA on ideology
+
+# Plot the histogram of the ideology variable
+ideoHist <- ggplot(data = voters, aes(ideo5))
+ideoHist <- ideoHist + geom_histogram(color = "white", binwidth = 1)
+ideoHist <- ideoHist + ggtitle("Histogram of self identified ideology")
+ideoHist <- ideoHist + scale_x_continuous("Ideology (1 = Very Liberal, 5 = Very conservative)")
+ideoHist
+
+```
+
+Placeholder text
+
+
+```{r}
+#4 ) EDA on other explanatory variables
+
+# a) Create a variable for age (use 2015 because this was conducted in January 2016)
+voters$age <- 2015 - voters$birthyr
+
+# b) Create a dummary variable for being female
+voters$female = voters$gender - 1
+
+# c) Examine these variables
+
+# Age:
+summary(voters$age)
+
+ageHist <- ggplot(data = voters, aes(age))
+ageHist <- ageHist + ggtitle("Age of Voters")
+ageHist <- ageHist + geom_histogram(color = "white", binwidth = 4)
+ageHist
+
+mean(voters$age)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Female:
+summary(voters$female)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Being white
+summary(voters$race_white)
+
+```
+
+Placeholder text
+
+
+```{r}
+#5 ) Examine Bivariate and Multivariate Relationships,
+
+# Examine the bivariate relationship between ideology and the difference variable
+# Is there a relationship between the rating of Clinton and the rating of Sanders?
+ideoVDiff <- ggplot(data = voters, aes(ideo5, diff))
+ideoVDiff <- ideoVDiff + geom_point() + geom_smooth(method = "lm")
+ideoVDiff <- ideoVDiff + scale_x_discrete("", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)"))
+ideoVDiff <- ideoVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton)")
+ideoVDiff <- ideoVDiff + coord_cartesian(xlim = c(1,5))
+ideoVDiff + ggtitle("Ideology Versus Preference for Sanders")
+
+slrModel1 <- lm(diff ~ ideo5, data = voters)
+summary(slrModel1)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Each of the other explanatory variables:
+
+slrModel2 <- lm(diff ~ female, data = voters)
+summary(slrModel2)
+
+```
+
+Placeholder text
+
+
+```{r}
+# AGE
+# Do older people rate Sanders higher than Clinton?
+ageVDiff <- ggplot(data = voters, aes(age, diff))
+ageVDiff <- ageVDiff + geom_point() + geom_smooth(method = "lm")
+ageVDiff <- ageVDiff + scale_x_continuous("Age")
+ageVDiff <- ageVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton)")
+ageVDiff
+
+slrModel3 <- lm(diff ~ age, data = voters)
+summary(slrModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+# BEING WHITE
+# Do white people rate Sanders higher than Clinton?
+slrModel4 <- lm(diff ~ race_white, data = voters)
+summary(slrModel4)
+
+```
+
+Placeholder text
+
+
+```{r}
+# We can check on a relationship between age and ideology:
+
+slrModel5 <- lm(ideo5 ~ age, data = voters)
+summary(slrModel5)
+
+```
+
+Placeholder text
+
+
+```{r}
+# The relationship between sex and ideology:
+
+slrModel6 <- lm(ideo5 ~ female, data = voters)
+summary(slrModel6)
+
+```
+
+Placeholder text
+
+
+```{r}
+# The relationship between race and ideology:
+
+slrModel7 <- lm(ideo5 ~ race_white, data = voters)
+summary(slrModel7)
+
+```
+
+Placeholder text
+
+
+```{r}
+# You might argue that women and men, and whites and non-whites, are really different 
+# populations when it comes to political ideology.  Let's try separating men and women.  
+# We might try doing this with whites and non-whites, but we have the problem of not
+# really understanding who the population of non-whites are. 
+
+men <- voters[voters$female == 0,]
+women <- voters[voters$female == 1,]
+
+# Men:
+# Examine the bivariate relationship between ideology and the difference variable
+# Is there a relationship between the rating of Clinton and the rating of Sanders?
+mideoVDiff <- ggplot(data = men, aes(ideo5, diff))
+mideoVDiff <- mideoVDiff + geom_point() + geom_smooth(method = "lm")
+mideoVDiff <- mideoVDiff + scale_x_discrete("Ideology (men)", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)") )
+mideoVDiff <- mideoVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton")
+mideoVDiff + coord_cartesian(xlim = c(1,5))
+
+menModel <- lm(diff ~ ideo5, data = men)
+summary(menModel)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Examine the bivariate relationship between ideology and the difference variable
+# Is there a relationship between the rating of Clinton and the rating of Sanders?
+fideoVDiff <- ggplot(data = women, aes(ideo5, diff))
+fideoVDiff <- fideoVDiff + geom_point() + geom_smooth(method = "lm")
+fideoVDiff <- fideoVDiff + scale_x_discrete("Ideology (Women)", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)"))
+fideoVDiff <- fideoVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton")
+fideoVDiff + coord_cartesian(xlim = c(1,5))
+
+womenModel <- lm(diff ~ ideo5, data = women)
+summary(womenModel)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Build up a model
+contModel1 <- lm(diff ~ ideo5, data = voters)
+summary(contModel1)
+
+```
+
+Placeholder text
+
+
+```{r}
+contModel2 <- lm(diff ~ ideo5 + age, data = voters)
+summary(contModel2)
+
+```
+
+Placeholder text
+
+
+```{r}
+anova(contModel1,contModel2)
+
+```
+
+Placeholder text
+
+
+```{r}
+contModel3 <- lm(diff ~ ideo5 + age + race_white, data = voters)
+summary(contModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+anova(contModel2,contModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+contModel4 <- lm(diff ~ ideo5 + age + race_white + female, data = voters)
+summary(contModel4)
+
+```
+
+Placeholder text
+
+
+```{r}
+anova(contModel3,contModel4)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Supposing we were going to use the continuous model, I would choose model 3
+# (Ideology + age + race_white)
+# Let's do some regression diagnositcs on this model:
+
+# First, get the residuals:
+contModelResiduals <- unname(contModel3$residuals)
+
+# Plot the predictor variables versus the residuals:
+
+# Ideology versus residuals
+ideoVRes <- ggplot(data = voters, aes(ideo5, contModelResiduals))
+ideoVRes <- ideoVRes + geom_point() + geom_smooth(method = "lm")
+ideoVRes <- ideoVRes + scale_x_discrete("Ideology", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)"))
+ideoVRes <- ideoVRes + scale_y_continuous("Residuals")
+ideoVRes + coord_cartesian(xlim = c(1,5))
+
+```
+
+Placeholder text
+
+
+```{r}
+# Age versus residuals
+ageVRes <- ggplot(data = voters, aes(age, contModelResiduals))
+ageVRes <- ageVRes + geom_point() + geom_smooth(method = "lm")
+ageVRes <- ageVRes + scale_x_continuous("Age")
+ageVRes <- ageVRes + scale_y_continuous("Residuals")
+ageVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Race versus residuals
+raceVRes <- ggplot(data = voters, aes(race_white, contModelResiduals))
+raceVRes <- raceVRes + geom_point() + geom_smooth(method = "lm")
+raceVRes <- raceVRes + scale_x_continuous("race_white")
+raceVRes <- raceVRes + scale_y_continuous("Residuals")
+raceVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Check the standard diagnostic plots:
+plot(contModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Do formal tests for 
+
+# Normality of residuals
+shapiro.test(contModelResiduals)
+
+```
+
+Placeholder text
+
+
+```{r}
+bptest(contModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+durbinWatsonTest(contModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Treat the ideo as categorical
+voters$vconserv <- ifelse(voters$ideo5 == 5, 1, 0)
+voters$conserv <- ifelse(voters$ideo5 == 4, 1, 0)
+voters$moderate <- ifelse(voters$ideo5 == 3, 1, 0)
+voters$liberal <- ifelse(voters$ideo5 == 2, 1, 0)
+voters$vliberal <- ifelse(voters$ideo5 == 1, 1, 0)
+voters$vliberal <- ifelse(voters$ideo5 == 1, 1, 0)
+
+```
+
+Placeholder text
+
+
+```{r}
+catModel <- lm(diff ~ conserv + moderate + liberal + vliberal, data = voters)
+summary(catModel)
+
+```
+
+Placeholder text
+
+
+```{r}
+catModel2 <- lm(diff ~ conserv + moderate + liberal + vliberal + age, data = voters)
+summary(catModel2)
+
+```
+
+Placeholder text
+
+
+```{r}
+catModel3 <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = voters)
+summary(catModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+catModel4 <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white + female, data = voters)
+summary(catModel4)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Supposing we were going to use the categorical model, I would choose model 3
+# (Ideology + age + race_white)
+# Let's do some regression diagnositcs on this model:
+
+# First, get the residuals:
+catModelResiduals <- unname(catModel3$residuals)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Plot the predictor variables versus the residuals:
+
+# Conservative ideology versus residuals
+conserVRes <- ggplot(data = voters, aes(conserv, catModelResiduals))
+conserVRes <- conserVRes + geom_point() + geom_smooth(method = "lm")
+conserVRes <- conserVRes + scale_x_continuous("Conserative")
+conserVRes <- conserVRes + scale_y_continuous("Residuals")
+conserVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Moderate ideology versus residuals
+modVRes <- ggplot(data = voters, aes(moderate, catModelResiduals))
+modVRes <- modVRes + geom_point() + geom_smooth(method = "lm")
+modVRes <- modVRes + scale_x_continuous("Moderate")
+modVRes <- modVRes + scale_y_continuous("Residuals")
+modVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Liberal ideology versus residuals
+libVRes <- ggplot(data = voters, aes(liberal, catModelResiduals))
+libVRes <- libVRes + geom_point() + geom_smooth(method = "lm")
+libVRes <- libVRes + scale_x_continuous("Liberal")
+libVRes <- libVRes + scale_y_continuous("Residuals")
+libVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Very liberal ideology versus residuals
+vlibVRes <- ggplot(data = voters, aes(vliberal, catModelResiduals))
+vlibVRes <- vlibVRes + geom_point() + geom_smooth(method = "lm")
+vlibVRes <- vlibVRes + scale_x_continuous("Very Liberal")
+vlibVRes <- vlibVRes + scale_y_continuous("Residuals")
+vlibVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Age versus residuals
+ageVRes <- ggplot(data = voters, aes(age, catModelResiduals))
+ageVRes <- ageVRes + geom_point() + geom_smooth(method = "lm")
+ageVRes <- ageVRes + scale_x_continuous("Age")
+ageVRes <- ageVRes + scale_y_continuous("Residuals")
+ageVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Race versus residuals
+raceVRes <- ggplot(data = voters, aes(race_white, catModelResiduals))
+raceVRes <- raceVRes + geom_point() + geom_smooth(method = "lm")
+raceVRes <- raceVRes + scale_x_continuous("race_white")
+raceVRes <- raceVRes + scale_y_continuous("Residuals")
+raceVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Check the standard diagnostic plots:
+plot(catModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Do formal tests for 
+
+# Normality of residuals
+shapiro.test(catModelResiduals)
+
+```
+
+Placeholder text
+
+
+```{r}
+bptest(catModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+durbinWatsonTest(catModel3)
+
+```
+
+Placeholder text
+
+
+```{r}
+
+# The final model
+
+modelNoPart <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = voters)
+coeftest(modelNoPart)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Including Partisanship
+
+```
+
+Placeholder text
+
+
+```{r}
+# Code a categoriccal partisanship variable
+voters$democrat <- ifelse(voters$pid3 == 1, 1, 0)
+voters$republican <- ifelse(voters$pid3 == 2, 1, 0)
+voters$independent <- ifelse(voters$pid3 == 3, 1, 0)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Add to the categorical model
+partModel <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white + democrat + republican, data = voters)
+coeftest(partModel)
+
+```
+
+Placeholder text
+
+
+```{r}
+waldtest(modelNoPart,partModel)
+
+```
+
+Placeholder text
+
+
+```{r}
+# First, get the residuals:
+partModelResiduals <- unname(partModel$residuals)
+
+# Plot the predictor variables versus the residuals:
+
+```
+
+Placeholder text
+
+
+```{r}
+# Conservative ideology versus residuals
+conserVRes <- ggplot(data = voters, aes(conserv, partModelResiduals))
+conserVRes <- conserVRes + geom_point() + geom_smooth(method = "lm")
+conserVRes <- conserVRes + scale_x_continuous("Conserative")
+conserVRes <- conserVRes + scale_y_continuous("Residuals")
+conserVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Moderate ideology versus residuals
+modVRes <- ggplot(data = voters, aes(moderate, partModelResiduals))
+modVRes <- modVRes + geom_point() + geom_smooth(method = "lm")
+modVRes <- modVRes + scale_x_continuous("Moderate")
+modVRes <- modVRes + scale_y_continuous("Residuals")
+modVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Liberal ideology versus residuals
+libVRes <- ggplot(data = voters, aes(liberal, partModelResiduals))
+libVRes <- libVRes + geom_point() + geom_smooth(method = "lm")
+libVRes <- libVRes + scale_x_continuous("Liberal")
+libVRes <- libVRes + scale_y_continuous("Residuals")
+libVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Very liberal ideology versus residuals
+vlibVRes <- ggplot(data = voters, aes(vliberal, partModelResiduals))
+vlibVRes <- vlibVRes + geom_point() + geom_smooth(method = "lm")
+vlibVRes <- vlibVRes + scale_x_continuous("Very Liberal")
+vlibVRes <- vlibVRes + scale_y_continuous("Residuals")
+vlibVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Age versus residuals
+ageVRes <- ggplot(data = voters, aes(age, partModelResiduals))
+ageVRes <- ageVRes + geom_point() + geom_smooth(method = "lm")
+ageVRes <- ageVRes + scale_x_continuous("Age")
+ageVRes <- ageVRes + scale_y_continuous("Residuals")
+ageVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Race versus residuals
+raceVRes <- ggplot(data = voters, aes(race_white, partModelResiduals))
+raceVRes <- raceVRes + geom_point() + geom_smooth(method = "lm")
+raceVRes <- raceVRes + scale_x_continuous("race_white")
+raceVRes <- raceVRes + scale_y_continuous("Residuals")
+raceVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Democratic partisanship versus residuals
+demVRes <- ggplot(data = voters, aes(democrat, partModelResiduals))
+demVRes <- demVRes + geom_point() + geom_smooth(method = "lm")
+demVRes <- demVRes + scale_x_continuous("Democrat")
+demVRes <- demVRes + scale_y_continuous("Residuals")
+demVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Republican partisanship versus residuals
+repVRes <- ggplot(data = voters, aes(republican, partModelResiduals))
+repVRes <- repVRes + geom_point() + geom_smooth(method = "lm")
+repVRes <- repVRes + scale_x_continuous("Republican")
+repVRes <- repVRes + scale_y_continuous("Residuals")
+repVRes
+
+```
+
+Placeholder text
+
+
+```{r}
+# Check the standard diagnostic plots:
+plot(partModel)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Do formal tests for:
+
+# Normality of residuals
+shapiro.test(partModelResiduals)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Heteroscedasticity of residuals
+bptest(partModel)
+
+```
+
+Placeholder text
+
+
+```{r}
+# Autocorrelation of residuals
+durbinWatsonTest(partModel)
+```
+
+Placeholder text
+
+Slopes:
+
+```{r}
+# Add to the categorical model
+democrats <- voters[voters$democrat == 1,]
+republicans <- voters[voters$republican == 1,]
+
+demoModel <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = democrats)
+coeftest(demoModel)
+
+```
+
+```{r}
+repubModel <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = republicans)
+coeftest(repubModel)
+```
+
+```{r}
+scatterplot(voters$democrat, voters$ideo5)
+```
