@@ -1,5 +1,7 @@
 ## Content
 
+Warning: This is a work in progress, with unfinished code.  
+
 The dataset, “uspublicopinion.csv,” contains a subset of variables from the American National
 Election Survey 2016 Pilot Study. The pilot study conducted a nationally representative survey
 between January 22 and January 28, 2016.
