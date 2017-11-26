@@ -1,8 +1,8 @@
 ## Ideology and the 2016 Democratic Primaries
 
-###Jessica Sanders
+_Jessica Sanders_
 
-See a rendered HTML of the voter modeling project here:  https://jd-sanders.github.io/PartisanshipRegressions/
+See a rendered HTML of this voter modeling project here:  https://jd-sanders.github.io/PartisanshipRegressions/
 
 Bernie Sanders challenged Hillary Clinton in the Presidential primary elections within the Democratic Party in 2016. These two candidates competed to represent the party in the general Presidential election. The conventional wisdom was that voters who supported Bernie Sanders were more ideologically liberal than those who supported Hillary Clinton. That narrative was complicated by suggestions that Bernie Sanders supporters were also somewhat likely to vote for Donald Trump in the general election.
 
