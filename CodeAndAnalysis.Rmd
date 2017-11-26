@@ -1,854 +1,759 @@
 ---
-title: "Some Sentiments on Bernie Sanders"
+title: "Ideology and the 2016 Democratic Primaries"
 author: "Jessica Sanders"
 date: ''
 output:
   html_document: default
-  word_document: default
 ---
 
-```{r}
+
+
+<span style="color:navy; font-size: 20pt">Background</span>
+
+Bernie Sanders challenged Hillary Clinton in the Presidential primary elections within the Democratic Party
+in 2016. These two candidates competed to represent the party in the general Presidential election. The
+conventional wisdom was that voters who supported Bernie Sanders were more ideologically liberal than
+those who supported Hillary Clinton.  That narrative was complicated by suggestions that Bernie Sanders supporters were also somewhat likely to vote for Donald Trump in the general election.  
+
+I'm interested in discerning the relationship between ideology and support for Bernie Sanders. Specifically, do the data from voter polls support the hypothesis that Sanders supporters were more liberal than Clinton supporters?  If so, does that characterization hold across demographic subgroups?  This document conducts data analysis and a regression model to address this question.  Accompanying data and R code can be found at https://github.com/jd-sanders/PartisanshipRegressions.
+
+<span style="color:navy; font-size: 20pt">Summary of Key Results</span>
+
+This analysis looks at data from a survey of likely voters conducted in January, 2016.  In a naive regression model, there appears to be no statistically significant correlation between a voter's ideology and stated preference for Bernie Sanders.  The correlation emerges only after controlling for party identification.  Democrats, on the whole, preferred Hillary Clinton.   Being more liberal, in any party category, was associated with greater levels of support for Sanders.  Sanders strongest level of support was among young male liberal Independents.  Partisanship and ideology, though interrelated, are distinct political phenomenon.  Any voter model that fails to account for them separately probably suffers from omitted variable bias.   
+
+<span style="color:navy; font-size: 20pt">Analysis and Results</span>
+
+The dataset in "us_public_opinion.csv" is a subset of variables from the American National Election
+Survey 2016 Pilot Study.  The study was conducted by Stanford University and The University of Michigan between January 22 and January 28. The survey sampled 1200 U.S. citizens aged 18 and older from the YouGov panel of opt-in online respondents. A cross-sectional design matched the survey respondents to a nationally representative target voting population based on gender, race, age and education.  The full dataset is available at http://www.icpsr.umich.edu/icpsrweb/ICPSR/studies/36390.
+
+### Variables
+
+**ftsanders**: Rating of Bernie Sanders from 0-100
+
+**fthrc**: Rating of Hillary Clinton from 0-100
+
+**ideo5**: Respondent's evaluation of their own ideology, 5 points scale (1 = Very liberal, 5 = Very conservative, 6 = Not sure)
+
+**pid3**: Respondent's party affiliation (1 = Democrat, 2 = Republican, 3 = Independent, 4 = Other, 5 = Not
+sure)
+
+**race_white**: Indicator variable taking the value of 1 if respondent is white, 0 otherwise
+
+**gender**: Indicator variable taking the value of 1 if respondent is male, 2 if respondent is female
+
+**birthyr**: Birthyear of the respondent
+
+
+### Data Checks on the Original Set 
+
+There are 1200 records in the dataset, each representing the response of an individual voter.  Between the two "feeling thermometer" variables, **ftsanders** and **fthrc**, there are 9 entries with a value of 998 for one or both.  The range is supposed to be 0 - 100. It is possible that 998 was a coding error, or represents a missing value. Either way, I remove the records without valid responses.  No other variables show obvious coding errors.
+
+Both the ideology and partisanship variable have an option for "Not Sure" or "Other", and over 100 responses include these values for one or both variables.  This is especially problematic for the ideology variable, which can otherwise be treated as an ordinal variable.  The options for dealing with this are to remove the records from the analysis, recode the "Not Sure" values, or include the data as an extra ideology category.  As this analysis is focused on standard measures of ideology and partisanship, I choose to remove the records, noting that the removal does not substantially affect the average candidate ratings.
+
+I replace **gender** with a binary encoded **female** variable (0 = male, 1 = female), and **birthyr** with **age**, which represents age at the time of the election.
+
+```{r setup_env, include=FALSE}
 #Setup the environment
 rm(list = ls())
 library(ggplot2)
 library(car)
 library(lmtest)
+library(stats)
+library(sandwich)
+library(Hmisc)
+library(stargazer)
+library(knitr)
+library(kableExtra)
+library(grid)
+library(gridExtra)
+options(knitr.table.format = "html") 
+```
 
+
+```{r, echo=FALSE}
+# Function to print a nice (row sum) proportion table for single variable
+print_single_var_prop_table <- function(var) {
+  
+  # How many columns are we looking at?
+  numCol = length(unique(var))
+  
+  # Create proportion tables
+  table = prop.table(table(var))
+
+  # Coerce to percentages
+  formattedTable <- apply(table*100, 1, function(u) sprintf("%.0f%%", u))
+  table <- data.frame(as.list(formattedTable),row.names=c("All Voters"))
+
+  # Plot a nice looking table
+  kable(table, digits=2, align=sample(c("c"),numCol,replace=TRUE)) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position="left")
+  
+}
+```
+
+
+```{r, echo=FALSE}
+# Function to print a nice (row sum) proportion table for a cross tabulation
+print_prop_table <- function(var1,var2) {
+  
+  # How many columns are we looking at?
+  numCol = length(unique(var2))
+  numRow = length(unique(var1))
+  
+  # Create proportion tables
+  table = prop.table(table(var1,var2),1)
+
+  # Coerce to percentages
+  formattedTable <- apply(table*100, 2, function(u) sprintf("%.0f%%", u))
+  table <- 'rownames<-'(as.data.frame(formattedTable), rownames(table))
+
+  # Plot a nice looking table
+  kable(table, digits=2, align=sample(c("c"),numCol,replace=TRUE)) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position="left")
+  
+}
+```
+
+
+```{r, echo=FALSE}
+# Function to print a nice summary table for a continuous variable
+nice_summary_table <- function(var,descriptor) {
+  
+  meanVar <- mean(var)
+  medianVar <- median(var)
+  sdVar <- sd(var)
+  minVar <- min(var)
+  maxVar <- max(var)
+  
+  # Create proportion tables
+  df <- data.frame(minVar,maxVar,meanVar,medianVar,sdVar)
+  colnames(df) <- c("Min","Max","Mean","Median","St. Dev")
+  rownames(df) <- descriptor
+
+  # Plot a nice looking table
+  kable(df, digits=2, align=c("c","c","c","c","c")) %>% 
+  kable_styling(bootstrap_options = "striped", full_width = F, position="center")
+  
+}
+```
+
+
+```{r read_data, include=FALSE}
 # Read in the data
 voters <- read.csv("us_public_opinion.csv")
 ```
 
-A
-
-```{r}
+```{r view_data, include=FALSE}
 # Check out the variables:  
 str(voters)
-```
-
-A
-
-```{r}
 summary(voters)
 ```
 
-A
-
-```{r}
+```{r eda, include=FALSE}
 table(voters$gender)
 table(voters$race_white)
 table(voters$ideo5)
 table(voters$pid3)
 ```
 
-A
 
-```{r}
+```{r clead_data, include=FALSE}
 # Recode and clean values:
 # Candidate ratings that are greater than 100 recoded to NA
 voters$ftsanders[voters$ftsanders > 100] <- NA
 voters$fthrc[voters$fthrc > 100] <- NA
 
-# The ideo5 "I don't know" cases aren't really relevant to our analyses, 
+# Remove the ideo5 "I don't know" cases.
 voters$ideo5[voters$ideo5 == 6] <- NA
+
+# Remove the pid3 "Other" and "Not Sure"
+voters$ideo5[voters$pid3 == 4] <- NA
+voters$ideo5[voters$pid3 == 5] <- NA
+
 voters <- voters[complete.cases(voters),]
 
 ```
 
-A
 
-```{r}
-# Plot the histogram of Bernie Sanders rating
-bernHist <- ggplot(data = voters, aes(ftsanders))
-bernHist <- bernHist + scale_x_continuous("Rating of Sanders")
-bernHist <- bernHist + ggtitle("Histogram of Bernie Sanders rating")
-bernHist <- bernHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
-
-bernHist <- bernHist + geom_histogram(color = "white", fill = "#154360", binwidth = 5)
-bernHist
-
-```
-
-A
-
-```{r}
-# Plot the histogram of Hillary Clinton rating
-hrcHist <- ggplot(data = voters, aes(fthrc))
-hrcHist <- hrcHist + scale_x_continuous("Rating of Clinton")
-hrcHist <- hrcHist + ggtitle("Histogram of Hillary Clinton rating")
-hrcHist <- hrcHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
-
-
-hrcHist <- hrcHist + geom_histogram(color = "white", fill = "#154360", binwidth = 5)
-hrcHist
-
-```
-
-A
-
-```{r}
-# Is there a relationship between the rating of Clinton and the rating of Sanders?
-bernVHRC <- ggplot(data = voters, aes(ftsanders, fthrc))
-bernVHRC <- bernVHRC + geom_point() + geom_smooth(method = "lm")
-bernVHRC <- bernVHRC + scale_x_continuous("Rating of Bernie Sanders")
-bernVHRC <- bernVHRC + scale_y_continuous("Rating of Hillary clinton")
-bernVHRC
-
-```
-
-A
-
-```{r}
-# Create a variable to be the difference between a voter's rating of Sanders and Clinton
-voters$diff <- voters$ftsanders - voters$fthrc
-
-mean(voters$diff)
-
-# Plot the histogram of the difference variable
-diffHist <- ggplot(data = voters, aes(diff, y= ..density..))
-diffHist <- diffHist + scale_x_continuous("Point preference for Sanders")
-diffHist <- diffHist + ggtitle("Difference in rating between Sanders and Clinton")
-diffHist <- diffHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
-
-diffHist <- diffHist + geom_histogram(color = "white", fill = "#154360", binwidth = 5)
-diffHist
-
-```
-
-A
-
-```{r}
-
-# Plot the histogram of the ideology variable
-ideoHist <- ggplot(data = voters, aes(ideo5))
-ideoHist <- ideoHist + geom_histogram(color = "white", fill = "#154360", binwidth = 1)
-ideoHist <- ideoHist + ggtitle("Histogram of self identified ideology")
-ideoHist <- diffHist + theme(plot.title = element_text(hjust = 0.5, lineheight=1, face="bold"))
-ideoHist <- ideoHist + scale_x_continuous("Ideology (1 = Very Liberal, 5 = Very conservative)")
-ideoHist
-
-```
-
-A
-
-```{r}
+```{r create_age_and_female_vars, echo=FALSE}
 
 # a) Create a variable for age (use 2015 because this was conducted in January 2016)
 voters$age <- 2015 - voters$birthyr
 
 # b) Create a dummary variable for being female
-voters$female = voters$gender - 1
+voters$female <- voters$gender - 1
 
-# c) Examine these variables
+voters$ideo5 <- voters$ideo5 - 1
 
+voters$adjustedAge <- voters$age - 18
+
+```
+
+
+```{r diff_variable, echo=FALSE}
+# Create a variable to be the difference between a voter's rating of Sanders and Clinton
+voters$diff <- voters$ftsanders - voters$fthrc
+```
+
+
+```{r create_factor_vars, echo=FALSE}
+
+# Create factors from numeric variables
+voters$ideolabel <- factor(voters$ideo5, labels = c("V.Liberal","Liberal","Moderate","Conservative","V.Conservative"))
+voters$racelabel <- factor(voters$race_white, labels = c("Non-white","White"))
+voters$racelabel <- relevel(voters$racelabel, "White")
+voters$femalelabel <- factor(voters$female, labels = c("Men","Women"))
+voters$pidlabel <- factor(voters$pid3, labels = c("Democrat","Republican","Independent"))
+```
+
+### Candidate Rating Variables
+
+The feeling thermometer variable, **ftsanders**, rates a voter's impression of Bernie Sanders on a scale of 0 to 100.  The distribution of values across all respondents is relatively even.  There are small spikes at 0 (voters who strongly dislike him), 50 (voters who have neutral feelings towards him), and 100 (voters who have strong positive feelings towards him).  A summary shows that the mean and median values are both close to 50, meaning the electorate has, on average, a fairly neutral response to him. 
+
+```{r sanders_histogram, fig.align="center", echo=FALSE}
+
+nice_summary_table(voters$ftsanders,"Rating of Sanders")
+
+# Plot the histogram of Bernie Sanders rating
+bernHist <- ggplot(data = voters, aes(ftsanders, y = ..count..)) +
+  geom_histogram(color = "white", fill = "#154360", binwidth = 5) +
+  scale_x_continuous("Rating (0-100)") +
+  scale_y_continuous("Number of Responses") +
+  ggtitle("How 1036 Respondants Rated Bernie Sanders") +
+  theme(plot.title = element_text(hjust = 0.5, face="bold", size=rel(1.5)))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+
+bernHist
+
+```
+
+The distribution of ratings for Hillary Clinton, given by **fthrc**, is somewhat different.  The strongest peak is at the lowest end of the rating, with 121 voters assigning her a 0 rating, and 277 voters rating her less than 5.  Her median rating is 49, meaning roughly half the electorate rates her unfavorably.  Interestingly, this is not dramatically different than the median value of 51 for Bernie Sanders.  Both candidates appear to have unfavorable ratings from roughly half of the electorate.  The difference is that voters that do rate Clinton unfavorably tend to rate her very negatively.   
+
+```{r clinton_histogram, fig.align="center", echo=FALSE}
+
+nice_summary_table(voters$fthrc,"Rating of Clinton")
+
+# Plot the histogram of Hillary Clinton rating
+hrcHist <- ggplot(data = voters, aes(fthrc, y = ..count..)) +
+  geom_histogram(color = "white", fill = "#154360", binwidth = 5) +
+  scale_x_continuous("Rating (0-100)") +
+  scale_y_continuous("Number of Responses") +
+  ggtitle("How 1036 Respondants Rated Hillary Clinton") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+
+hrcHist
+
+```
+
+Despite the differences in the underlying distribution, the ratings of the two candidates are correlated.  This fact is unsurprising given that they belong to the same political party.
+
+```{r ratings_correlation, fig.align="center", echo=FALSE}
+# Are the two ratings related?
+bernVHRC <- ggplot(data = voters, aes(ftsanders, fthrc)) +
+  geom_point() + geom_smooth(method = "lm") +
+  scale_x_continuous("Rating of Bernie Sanders") +
+  scale_y_continuous("Rating of Hillary Clinton") +
+  ggtitle("Is There a Correlation Between the Two Ratings?") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+
+bernVHRC
+
+```
+
+I want a measure of voter preference between the candidates, so I create a variable **diff** by subtracting Clinton's rating from Sanders's rating.  A positive value means a voter rated Sanders more highly, and negative value means a voter rated Clinton more highly.  This variable will become the dependent variable in a linear regression model when I try to answer the question of whether more liberal voters tend to prefer Sanders.
+
+The distribution of the preference variable (shown below) has a noticeable spike at 0 where voters rate the candidates equally.  The mean value is 6.54, meaning the electorate as a whole has a slight preference for Sanders.  It's worth noting here that there are many reasons why this might not have been predictive of Sanders winning the primary elections, which he didn't.  These numbers represent the entire electorate, including many people who presumably voted in the Republican primaries.  It is possible that many of Clinton's negative sentiments are concentrated among these voters.   We saw earlier, also, that voters who rated Clinton poorly tended to rate her extremely poorly.  A single voter who gives Clinton a very low rating would lower the mean of the distribution while still only representing one vote.
+
+```{r diff_histogram, fig.align="center", echo=FALSE}
+
+nice_summary_table(voters$diff,"Candidate Preference")
+
+# Plot the histogram of the difference variable
+diffHist <- ggplot(data = voters, aes(diff, y = ..count..)) +
+  geom_histogram(color = "white", fill = "#154360", binwidth = 5) +
+  scale_x_continuous("Preference for Sanders") + 
+  scale_y_continuous("Number of Responses") + 
+  ggtitle(expression(atop("Overall Candidate Preference for 1036 Respondants", atop(italic("Negative responses prefer Clinton, positive responses prefer Sanders."))))) +
+  #ggtitle("Overall Candidate Preference for 1200 Respondants") +
+  theme(plot.title = element_text(hjust = 0.5, vjust= -0.8, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+
+diffHist
+
+```
+
+There would be ways to do this analysis without the **diff** variable. For example, I could regress the ratings of the Sanders and Clinton on ideology separately, and compare the estimates. Alternatively, I could split out very liberal voters (and possibly other categories) and do a dependent t-test to compare their mean ratings of Clinton and Sanders. I could recode the preference variable as a binary variable, indicating only whether a voter rated Sanders or Clinton, and use a logistic regression model. Instead of these other options I choose to use **diff** as the dependent variable in an ordinary least squares (OLS) regression.
+
+### Possible "predictive" variables
+
+**Ideology**
+
+Ideology is measured on a 5 -oint scale ranging from "Very Liberal" to "Very
+Conservative".  Voters who are not sure about their own ideology have a value of 6. This is an
+ordinal categorical variable (with a "catch"). This kind of coding is problematic because it implies that voters that select "Not Sure" are more conservative than the most conservative of voters, which is not the case. Early in the analysis I elected to drop the "Not Sure" records.  
+
+An important modeling decision is to whether to treat this variable as continuous or categorical. It is not always (or even generally) appropriate to use a numerical scale for ordinal variables.  In this case, we need to be confident that moving up the scale from "Very Liberal" to "Liberal" represents the same size "step" as moving from "Liberal" to "Moderate", etc.  I will assume this is the case.  
+
+A plurality of voters identify themselves as moderate.
+```{r echo=FALSE}
+print_single_var_prop_table(voters$ideolabel)
+```
+
+**Partisanship**
+
+Partisanship is a categorical variable with 3 relevant categories, "Democrat","Repubican", and "Independent".  It is common to think of partisanship and ideology as proxies for each other, but they are distinct phenomenon.  In this dataset, a plurality of voters identify as Democrats, and the second largest portion identify as Independents.  
+
+```{r echo=FALSE}
+print_single_var_prop_table(voters$pidlabel)
+```
+
+**Age**
+
+Age is not normally distributed.  The average voter age is 48.  When building the linear model I use an adjusted age that represents years above 18.  This adjustment makes it easier to interpret the model because the intercept will represent an 18-year-old voter instead of a 0-year-old voter.  
+
+```{r age_histogram, fig.align="center", echo=FALSE}
 # Age:
-summary(voters$age)
 
-ageHist <- ggplot(data = voters, aes(age))
-ageHist <- ageHist + ggtitle("Age of Voters")
-ageHist <- ageHist + geom_histogram(color = "white", binwidth = 4)
+nice_summary_table(voters$age, "Voter Age")
+
+ageHist <- ggplot(data = voters, aes(age)) +
+  geom_histogram(color = "white", fill = "#154360", binwidth = 4) +
+  scale_x_continuous("Age") + scale_y_continuous("Number of Responses") +
+  ggtitle("Distribution of Voter Ages") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+
 ageHist
+```
 
-mean(voters$age)
+**Other demographic variables**
+
+The voting population is 52% women and 72% white.  The coding for this variable does not give us any other information about what "non-white" means.  As such, it would be inappropriate to generalize any conclusions derived for "non-white" voters to any particular group, such as black or non-white Hispanic voters.  
+
+```{r tables_for_gender_race_ideology, echo=FALSE}
+
+print_single_var_prop_table(voters$femalelabel)
+print_single_var_prop_table(voters$racelabel)
 
 ```
 
-Placeholder text
+### Basic Relationships Between the Variables
+
+**Demographic variables versus ideology and partisanship**
+
+I would expect variables like age, gender and race to be somewhat predictive of both ideology and partisanship. Conventional wisdom holds that younger voters are more liberal.   Boxplots showing the median age for each category give us a sense that there might be an age effect.  
+
+```{r age_versus_ideology, fig.align="center", echo=FALSE, warning=FALSE}
+
+# Examine the bivariate relationship between ideology and age
+ideoVAge <- ggplot(data = voters, aes(ideolabel, age)) +
+  geom_point() + geom_boxplot(aes(fill = ideolabel), alpha =0.5) +
+  scale_x_discrete("", limit =c("V. Liberal","Liberal","Moderate","Conservative","V. Conservative")) + scale_fill_manual(values=c("#0300c9","#6800c9","#c600c9","#c90068","#c9000d")) +
+  scale_y_continuous("Age") + guides(fill=FALSE) +
+  ggtitle("Are Liberal Voters Younger on Average?") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))  +
+  theme(axis.text.x = element_text(size=rel(1.2)))
+
+ideoVAge
+```
+
+```{r age_versus_partisanship, fig.align="center", echo=FALSE, warning=FALSE}
+
+# Examine the bivariate relationship between partisanship and age
+partVAge <- ggplot(data = voters, aes(pid3, age)) +
+  geom_point() + geom_boxplot(aes(fill = pidlabel), alpha =0.5) +
+  scale_x_discrete("", limit =c("Democrat","Republican","Independent")) +
+  scale_fill_manual(values=c("#0300c9","#c9000d","#c600c9")) +
+  scale_y_continuous("Age") + guides(fill=FALSE) +
+  ggtitle("Are Democrats Younger on Average?") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))  +
+  theme(axis.text.x = element_text(size=rel(1.2)))
+
+partVAge
+```
+
+A formal analysis of variance (ANOVA) gives us good evidence (p-value 5.6e-08) that the mean age of voters is different across ideologies, but does not provide the same evidence for partisanship (p-value 0.611).  While it appears that Democrats are younger on average than Republicans, whether there is a systematic difference for independents versus partisans is less clear.     
 
 
-```{r}
-# Female:
-summary(voters$female)
+```{r include=FALSE}
+# Check for variance in age over partisanship
+anova(lm(age~pid3, data=voters))
+```
+
+
+```{r include=FALSE}
+# Check for variance in age over ideology
+anova(lm(age~ideo5, data=voters))
+```
+
+The following tables compare race and gender with ideology and partisanship.  In each case, a formal Chi-squared test of independence provides evidence that gender and race are statistically significant (p-values less than 0.01) predictors of ideology and partisanship.  White voters appear to be systematically more conservative than non-white voters.  Non-white voters are overwhelmingly more identified with the Democratic party.  These results would be expected by anyone familiar with the American political landscape.  
+
+```{r race_ideology_table, echo=FALSE}
+# Table of race versus ideology
+print_prop_table(voters$racelabel,voters$ideolabel)
 
 ```
 
-Placeholder text
+```{r gender_ideology_table, echo=FALSE}
+# Table of gender versus ideology
+print_prop_table(voters$femalelabel,voters$ideolabel)
+```
 
-
-```{r}
-# Being white
-summary(voters$race_white)
+```{r race_partisanship_table, echo=FALSE}
+# Table of race versus ideology
+print_prop_table(voters$racelabel,voters$pidlabel)
 
 ```
 
-Placeholder text
-
-
-```{r}
-#5 ) Examine Bivariate and Multivariate Relationships,
-
-# Examine the bivariate relationship between ideology and the difference variable
-# Is there a relationship between the rating of Clinton and the rating of Sanders?
-ideoVDiff <- ggplot(data = voters, aes(ideo5, diff))
-ideoVDiff <- ideoVDiff + geom_point() + geom_smooth(method = "lm")
-ideoVDiff <- ideoVDiff + scale_x_discrete("", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)"))
-ideoVDiff <- ideoVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton)")
-ideoVDiff <- ideoVDiff + coord_cartesian(xlim = c(1,5))
-ideoVDiff + ggtitle("Ideology Versus Preference for Sanders")
-
-slrModel1 <- lm(diff ~ ideo5, data = voters)
-summary(slrModel1)
+```{r gender__table, echo=FALSE}
+# Table of gender versus ideology
+print_prop_table(voters$femalelabel,voters$pidlabel)
 
 ```
 
-Placeholder text
-
-
-```{r}
-# Each of the other explanatory variables:
-
-slrModel2 <- lm(diff ~ female, data = voters)
-summary(slrModel2)
-
+```{r, include = FALSE}
+chisq.test(table(voters$racelabel,voters$ideolabel))
+chisq.test(table(voters$femalelabel,voters$ideolabel))
+chisq.test(table(voters$racelabel,voters$pidlabel))
+chisq.test(table(voters$femalelabel,voters$pidlabel))
 ```
 
-Placeholder text
+The next table gives the distribution of ideology in each party.  Unsurprisingly, Democrats skew liberal and Republicans skew conservative.  Roughly half of Independents identify as something other than moderate.  
+
+```{r partisanship_ideology_table, echo=FALSE}
+# Table of gender versus ideology
+print_prop_table(voters$pidlabel,voters$ideolabel)
+```
+
+```{r, include=FALSE}
+chisq.test(table(voters$pidlabel,voters$ideolabel))
+```
 
 
-```{r}
-# AGE
-# Do older people rate Sanders higher than Clinton?
-ageVDiff <- ggplot(data = voters, aes(age, diff))
-ageVDiff <- ageVDiff + geom_point() + geom_smooth(method = "lm")
-ageVDiff <- ageVDiff + scale_x_continuous("Age")
-ageVDiff <- ageVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton)")
+**Demographic variables versus candidate preference**
+
+In this section I look at each demographic variable in turn to see if it appears to be predictive of candidate preference.  
+
+
+_Age_
+
+The plot of age versus candidate preference is very noisy, but there does appear to be a small downward trend, meaning younger voters are more likely to prefer Sanders.  A simple linear regression (summarized below) gives an estimate that a six-year addition to a voter's age is associated with an approximately single point shift from Sanders to Clinton. The expected preference for an 18-year-old is Sanders by 11.5 points, whereas the expected preference of an 88-year-old is Clinton by 0.25 points.  It's clear from both the plot and the small adjusted $R^2$ value that most of the variation in the preference variable is not explained by age.
+
+```{r age_versus_preference, fig.align="center", echo=FALSE}
+# Is age related to preference for Sanders?
+ageVDiff <- ggplot(data = voters, aes(age, diff)) +
+  geom_point() + geom_smooth(method = "lm") +
+  scale_x_continuous("Age") +
+  scale_y_continuous("Preference for Sanders") +
+  ggtitle("Are Younger Voters More Likely to Prefer Bernie Sanders?") +
+  scale_color_manual("Ideology") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+
 ageVDiff
 
-slrModel3 <- lm(diff ~ age, data = voters)
-summary(slrModel3)
 
 ```
 
-Placeholder text
+```{r echo=FALSE, results="asis"}
+ageDiffModel <- lm(diff~adjustedAge, data=voters)
+stargazer(ageDiffModel,type="html",out.header = TRUE,
+          dep.var.labels.include = FALSE,
+          dep.var.caption = "Preference for Sanders")
+```
 
+<br>
+_Gender_
 
-```{r}
-# BEING WHITE
-# Do white people rate Sanders higher than Clinton?
-slrModel4 <- lm(diff ~ race_white, data = voters)
-summary(slrModel4)
+How does gender affect candidate preference?  A boxplot (right plot below) makes it appear that the spread of preference is very similar between men and women.  In fact, the mean value of the preference variable for men is 8.5 (meaning an 8.5-point preference for Sanders) and the mean value for women is 4.7.  A t-test gives only marginal evidence (p-value 0.08) that this different is a genuine effect and not just noise.  I also plot the histograms for preference separately for men and women below.  They appear to be very similar, though women may have a greater number of points in the left tail (higher support for Clinton).  
+
+```{r gender_versus_pref_histograms, fig.align="center", echo=FALSE}
+
+# Plot the histogram of the diff variable by gender
+diffHist3 <- ggplot(data = voters, aes(diff, y = ..density..)) +
+  geom_histogram(fill = "#789AAF", binwidth = 5) +
+  geom_density() + facet_grid(. ~femalelabel) +
+  scale_x_continuous("Point preference for Sanders") +
+  scale_y_continuous("Proportion of Responses") +
+  ##ggtitle("Men and women have different patterns of candidate preference.") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold")) +
+  theme(strip.text = element_text(size=rel(1.2)))  +
+  theme(axis.title = element_text(size=rel(1.2)))
 
 ```
 
-Placeholder text
 
-
-```{r}
-# We can check on a relationship between age and ideology:
-
-slrModel5 <- lm(ideo5 ~ age, data = voters)
-summary(slrModel5)
-
-```
-
-Placeholder text
-
-
-```{r}
-# The relationship between sex and ideology:
-
-slrModel6 <- lm(ideo5 ~ female, data = voters)
-summary(slrModel6)
+```{r gender_versus_pref_boxplots, fig.align="center", echo=FALSE}
+# Examine the bivariate relationship between gender and the difference variable
+genVDiff <- ggplot(data = voters, aes(femalelabel, diff)) +
+  geom_point() + geom_boxplot(aes(fill = femalelabel), alpha =0.5) +
+  guides(fill=FALSE) +
+  scale_x_discrete("", limit =c("Men","Women")) +
+  scale_y_continuous("Preference for Sanders") +
+  ##ggtitle("Gender Versus Preference for Sanders") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.text.x = element_text(size=rel(1.5)))  +
+  theme(axis.title = element_text(size=rel(1.2)))
 
 ```
 
-Placeholder text
+```{r gender_v_pref, fig.width=10,fig.height=5, echo=FALSE}
+grid.arrange(diffHist3,genVDiff,nrow=1,widths=c(0.6,0.4),top=textGrob("How Does Gender Affect Candidate Preference?",gp=gpar(fontsize=20,face="bold")))
+```
 
+```{r, include=FALSE}
+# T.test for gender versus candidate preference
+t.test(diff~femalelabel,data=voters)
+```
 
-```{r}
-# The relationship between race and ideology:
+_Race_
 
-slrModel7 <- lm(ideo5 ~ race_white, data = voters)
-summary(slrModel7)
+Race appears to be much more predictive of candidate preference.  The distributions for white and non-white voters below have more obvious differences.  The mean rating for white voters is 11.8 whereas for non-white voters it's -8.  The difference is highly statistically significant (p-value 1.3e-13).  
+
+```{r race_versus_pref_histograms, fig.align="center", echo=FALSE}
+
+# Plot the histogram of the diff variable by race
+diffHist4 <- ggplot(data = voters, aes(diff, y = ..density..)) +
+  geom_histogram(fill = "#789AAF", binwidth = 5) +
+  geom_density() + facet_grid(. ~racelabel) +
+  scale_x_continuous("Point preference for Sanders") +
+  scale_y_continuous("Proportion of Responses") +
+  ##ggtitle("Distributions of candidate preference by race") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold")) +
+  theme(strip.text = element_text(size=rel(1.2)))  +
+  theme(axis.title = element_text(size=rel(1.2)))
 
 ```
 
-Placeholder text
+
+```{r race_versus_pref_boxplots, fig.align="center", echo=FALSE}
+# Examine the bivariate relationship between race and the difference variable
+raceVDiff <- ggplot(data = voters, aes(racelabel, diff)) +
+  geom_point() + geom_boxplot(aes(fill = racelabel), alpha =0.5) +
+  guides(fill=FALSE) +
+  scale_y_continuous("Point preference for Sanders") +
+  scale_x_discrete("", limit =c("Non-white","White")) +
+  scale_fill_manual(values=c("#ab00c9","#f2e600")) +
+  ##ggtitle("Race Versus Preference for Sanders") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.text.x = element_text(size=rel(1.5)))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+
+```
 
 
-```{r}
-# You might argue that women and men, and whites and non-whites, are really different 
-# populations when it comes to political ideology.  Let's try separating men and women.  
-# We might try doing this with whites and non-whites, but we have the problem of not
-# really understanding who the population of non-whites are. 
+```{r race_v_pref, fig.width=10,fig.height=5, echo=FALSE}
+grid.arrange(diffHist4,raceVDiff,nrow=1,widths=c(0.6,0.4),top=textGrob("How Does Race Affect Candidate Preference?",gp=gpar(fontsize=20,face="bold")))
+```
 
-men <- voters[voters$female == 0,]
-women <- voters[voters$female == 1,]
 
-# Men:
+```{r, include=FALSE}
+# T.test for gender versus candidate preference
+t.test(diff~race_white,data=voters)
+```
+
+_Ideology_
+
+Ideology is the variable of greatest interest for this analysis.  From the boxplots below, it's not clear if there's a strong pattern than spans the spectrum from very liberal to very conservative, though it does appear that voters in the "very liberal" category have a stronger preference for Sanders than voters in the other category.  
+
+
+```{r fig.align="center", echo=FALSE}
 # Examine the bivariate relationship between ideology and the difference variable
-# Is there a relationship between the rating of Clinton and the rating of Sanders?
-mideoVDiff <- ggplot(data = men, aes(ideo5, diff))
-mideoVDiff <- mideoVDiff + geom_point() + geom_smooth(method = "lm")
-mideoVDiff <- mideoVDiff + scale_x_discrete("Ideology (men)", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)") )
-mideoVDiff <- mideoVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton")
-mideoVDiff + coord_cartesian(xlim = c(1,5))
+ideoVDiff <- ggplot(data = voters, aes(ideolabel, diff)) +
+  geom_point() + geom_boxplot(aes(fill = ideolabel), alpha =0.5) +
+  scale_x_discrete("") +
+  scale_y_continuous("Point Preference for Sanders") +
+  scale_fill_manual(values=c("#0300c9","#6800c9","#c600c9","#c90068","#c9000d")) +
+  guides(fill=FALSE) +
+  ##ggtitle("Does Ideology Predict Candidate Preference?") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))
+  ##theme(axis.text.x = element_text(size=rel(1.2)))
 
-menModel <- lm(diff ~ ideo5, data = men)
-summary(menModel)
 
 ```
 
-Placeholder text
+An interesting pattern emerges when you look at the distributions separately for each category.  As voters become more conservative, they are more likely to rate Sanders and Clinton the same (the large spike at 0).
 
+```{r fig.align="center", echo=FALSE}
 
-```{r}
-# Examine the bivariate relationship between ideology and the difference variable
-# Is there a relationship between the rating of Clinton and the rating of Sanders?
-fideoVDiff <- ggplot(data = women, aes(ideo5, diff))
-fideoVDiff <- fideoVDiff + geom_point() + geom_smooth(method = "lm")
-fideoVDiff <- fideoVDiff + scale_x_discrete("Ideology (Women)", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)"))
-fideoVDiff <- fideoVDiff + scale_y_continuous("Difference in ratings (Sanders - Clinton")
-fideoVDiff + coord_cartesian(xlim = c(1,5))
-
-womenModel <- lm(diff ~ ideo5, data = women)
-summary(womenModel)
+diffHist2 <- ggplot(data = voters, aes(diff, y = ..density..)) +
+  geom_histogram(fill = "#789AAF", binwidth = 5) +
+  geom_density() + facet_grid(. ~ideolabel) +
+  scale_x_continuous("Point preference for Sanders") +
+  scale_y_continuous("Proportion of Responses") +
+  ##ggtitle("Liberal Voters Express a Stronger Candidate Preference") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.title = element_text(size=rel(1.2)))
 
 ```
 
-Placeholder text
 
+```{r ideo_v_pref, fig.width=10,fig.height=5, echo=FALSE}
+grid.arrange(diffHist2,ideoVDiff,nrow=1,widths=c(0.5,0.5),top=textGrob("How Does Ideology Affect Candidate Preference?",gp=gpar(fontsize=20,face="bold")))
+```
 
-```{r}
-# Build up a model
-contModel1 <- lm(diff ~ ideo5, data = voters)
-summary(contModel1)
+_Partisanship_
+
+We know (from conventional wisdom and from an earlier cross-tabulation) that partisanship and ideology are highly correlated.  However, the boxplots below show that in terms of candidate preference, partisanship has the _opposite_ effect of ideology. Whereas being a liberal appeared to be correlated with support for Bernie Sanders, being a Democrat is predictive of greater support for Hillary Clinton.  This may be the most interesting result from the exploratory data analysis.  It also suggests that any model that includes only ideology or partisanship and not the other will suffer from omitted variable bias.  
+
+```{r part_versus_pref_histograms, fig.align="center", echo=FALSE}
+
+# Plot the histogram of the diff variable by partisanship
+diffHistPart <- ggplot(data = voters, aes(diff, y = ..density..)) +
+  geom_histogram(fill = "#789AAF", binwidth = 5) +
+  geom_density() + facet_grid(. ~pidlabel) +
+  scale_x_continuous("Point preference for Sanders") +
+  scale_y_continuous("Proportion of Responses") +
+  ##ggtitle("Distributions of candidate preference by race") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold")) +
+  theme(strip.text = element_text(size=rel(1.2)))  +
+  theme(axis.title = element_text(size=rel(1.2)))
 
 ```
 
-Placeholder text
 
-
-```{r}
-contModel2 <- lm(diff ~ ideo5 + age, data = voters)
-summary(contModel2)
-
-```
-
-Placeholder text
-
-
-```{r}
-anova(contModel1,contModel2)
-
-```
-
-Placeholder text
-
-
-```{r}
-contModel3 <- lm(diff ~ ideo5 + age + race_white, data = voters)
-summary(contModel3)
+```{r part_versus_pref_boxplots, fig.align="center", echo=FALSE}
+# Examine the bivariate relationship between partisanship and the difference variable
+partVDiff <- ggplot(data = voters, aes(pidlabel, diff)) +
+  geom_point() + geom_boxplot(aes(fill = pidlabel), alpha =0.5) +
+  guides(fill=FALSE) +
+  scale_y_continuous("Point preference for Sanders") +
+  scale_x_discrete("", limit =c("Democrat","Republican","Independent")) +
+  scale_fill_manual(values=c("#0300c9","#c9000d","#c600c9")) +
+  ##ggtitle("Race Versus Preference for Sanders") +
+  theme(plot.title = element_text(hjust = 0.5, size=rel(1.5), face="bold"))  +
+  theme(axis.text.x = element_text(size=rel(1.5)))  +
+  theme(axis.title = element_text(size=rel(1.2)))
 
 ```
 
-Placeholder text
+
+```{r part_v_pref, fig.width=10,fig.height=5, echo=FALSE}
+grid.arrange(diffHistPart,partVDiff,nrow=1,widths=c(0.6,0.4),top=textGrob("How Does Partisanship Affect Candidate Preference?",gp=gpar(fontsize=20,face="bold")))
+```
 
 
-```{r}
-anova(contModel2,contModel3)
+### Model Building
+
+The analysis to this point tells us that the demographic variables and self-reported ideology and partisanship are all inter-related. This tells us it is important to include these demographic variables in an explanatory model.  We should also explore interaction effects.  For example, does ideology matter more to white males than to some other subgroup?
+
+I compare four linear regression models.  The dependent variable is always the candidate preference variable. The first model includes only ideology.  For the sake of interpretability, I recode the variable so that 0 = "Very Liberal"" and 4 = "Very Conservative".  The change doesn't affect the model results, but does allow us to interpret the base case as a very liberal voter.  
+
+The second model controls for partisanship, the third also adds demographic variables, and the final model includes interaction effects. Results are tabulated below.  I report adjusted robust standard errors and F statistics, because I anticipate heteroskedisticy of the model errors (see model diagnostics).
+
+
+```{r include=FALSE}
+model1 <- lm(diff~ideo5, data=voters)
+model2 <- lm(diff~ideo5 + pidlabel, data=voters)
+model3 <- lm(diff~ideo5 + pidlabel + adjustedAge + femalelabel + racelabel, data=voters)
+model4 <- lm(diff~ideo5 + pidlabel + adjustedAge + femalelabel + racelabel + ideo5:pidlabel + ideo5:femalelabel + ideo5:racelabel, data=voters)
+
+covModel1         <- vcovHC(model1, type = "HC1")
+covModel2         <- vcovHC(model2, type = "HC1")
+covModel3         <- vcovHC(model3, type = "HC1")
+covModel4         <- vcovHC(model4, type = "HC1")
+
+robust_se1    <- sqrt(diag(covModel1))
+robust_se2    <- sqrt(diag(covModel2))
+robust_se3    <- sqrt(diag(covModel3))
+robust_se4    <- sqrt(diag(covModel4))
+
+waldtest(model1, vcov = covModel1, test="F")
+waldtest(model2, vcov = covModel2, test="F")
+waldtest(model3, vcov = covModel3, test="F")
+waldtest(model4, vcov = covModel4, test="F")
+```
+
+```{r echo=FALSE, results='asis'}
+stargazer::stargazer(model1,model2,model3,model4,type="html",out.header = TRUE,
+                     dep.var.labels.include = FALSE,
+                     se = list(robust_se1,robust_se2,robust_se3,robust_se4),
+                     omit.stat = c("f"),
+                     dep.var.caption = "Preference for Sanders",
+                     covariate.labels = c("Ideology","Republican","Independent",
+                                          "Adjusted Age","Women","NonWhite","IdeologyRepublican",
+                                          "IdeologyIndependent", "IdeologyWomen",
+                                          "IdeologyNonWhite"),
+                     add.lines = list(c("F Statistic (df = 1,3,6,10)", "0.4007",
+                                        "19.135***","19.315***","13.013***")))
 
 ```
 
-Placeholder text
+### Model Selection and Interpretation
 
-
-```{r}
-contModel4 <- lm(diff ~ ideo5 + age + race_white + female, data = voters)
-summary(contModel4)
-
+```{r, include=FALSE}
+waldtest(model1,model2,model3,model4, test="F")
 ```
 
-Placeholder text
+The simplest and most naive model (model 1) does not provide evidence that ideology is correlated with relative support for Sanders.  However, after controlling for partisanship and demographic variables (model 3), the relationship between being liberal and having a relative preference for Sanders becomes both practically and statistically significant. Though model 3 is not the model with the greatest explanatory power (that is model 4), it shares certain trends and is a little easier to interpret.
+
+**Interpretation of model 3**
+
+After controlling for partisanship and demographics, a single "shift" from a liberal to a more conservative category is associated with a 3-point increase in preference for Clinton (first row, third column in the regression table).  Put another way, being in a more liberal category increases a voter's expected relative support for Sanders by 3 points.  
+
+Once partisanship and ideology are both included in the model, being a Democrat has the opposite effect of being a liberal.  Democrats display a 16-point preference for Clinton over Independents.  This result was suggested by the earlier exploratory analysis.  It is the partial collinearity of partisanship and ideology that obscured the role of ideology in the simpler model. If partisans prefer Clinton, and there is correlation between being liberal and being a Democrat, then the "liberal" category contained both those voters who prefer Sanders for reasons of being a "liberal" and those who preferred Clinton for reasons of being "partisan". Once we are controlling for the effect of being a Democrat, we can see that there is a liberal tilt towards Sanders.
+
+**Interpretation of model 4**
+
+Wald tests show that the fourth model has the greatest explanatory power.  The model includes both demographic variables and interaction effects. There is a high degree of heterogeneity across different demographic subgroups, which suggests that demographic characteristics of voters might matter more than ideology.
+
+In this model, the base case is a very liberal (ideology = 0), 18-year-old white male Democrat.  His expected relative candidate preference is the constant term: +26.68 points for Sanders.  For a very liberal voter only, we can ignore the interaction terms and see the effects of changing his demographics.  For example, changing the voter to "non white"" changes his expected support to +3.43 for Sanders (26.68 - 23.249).  Changing his party affiliation to Independent changes his expected support to +32.59 (26.68 + 5.909).  If we return to the 18-year-old white male Democrat, we can also directly read the effect of changing his ideology. For every "step" up the conservative scale, we expect his relative support of Sanders to erode by 10.55 points.  
+
+The interaction terms allow us to have a different "ideology" coefficient for different demographic subgroups.   In the example of the very liberal 18-year-old non-white male democrat, (who originally has expected relative preference of +3.43 for Sanders), every "step" up the ideology scale erodes his expected relative support of Sanders by 6.87 points (10.55 - 3.68).
+
+<span style="color:navy; font-size: 20pt">Appendix: Model Diagnostics and Caveats</span>
+
+When using linear regression to make statistical inference, we are obligated to assess the model validity in terms of the central assumptions of the OLS model.  
+
+These data are not a perfectly random sample of the population. While the
+data are drawn from a nationally representative sample, the survey itself uses an opt-in design that cannot guarantee representation of non-observables.  The study also uses weights to resemble a nationally
+representative sample.  These facts _do not_ mean that the results are biased for the particular sample of voters in the poll, but _they may be biased_ if we want to generalize it to address the question for the nation as a whole.  
+
+When running linear regression on observational data it is almost impossible to guarantee that there is no omitted variable bias.   
+
+The model violates the homoskedasticity assumption (constant variance of the error term).  A formal Breusch-Pagan test (below, with scatterplot for visualization) rejects the null hypothesis of homoskedasticity. The presence of heteroskedastic errors alone does not mean that our estimates are biased, just that they are inefficient, invalidating the usual estimates for standard errors. As a result, I used robust standard errors when reporting the model's results.
 
 
 ```{r}
-anova(contModel3,contModel4)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Supposing we were going to use the continuous model, I would choose model 3
-# (Ideology + age + race_white)
-# Let's do some regression diagnositcs on this model:
-
-# First, get the residuals:
-contModelResiduals <- unname(contModel3$residuals)
-
-# Plot the predictor variables versus the residuals:
-
-# Ideology versus residuals
-ideoVRes <- ggplot(data = voters, aes(ideo5, contModelResiduals))
-ideoVRes <- ideoVRes + geom_point() + geom_smooth(method = "lm")
-ideoVRes <- ideoVRes + scale_x_discrete("Ideology", limit = c("Very Liberal (1)","Liberal (2)","Moderate (3)","Conservative (4)","Very Conservative (5)"))
-ideoVRes <- ideoVRes + scale_y_continuous("Residuals")
-ideoVRes + coord_cartesian(xlim = c(1,5))
-
-```
-
-Placeholder text
-
-
-```{r}
-# Age versus residuals
-ageVRes <- ggplot(data = voters, aes(age, contModelResiduals))
-ageVRes <- ageVRes + geom_point() + geom_smooth(method = "lm")
-ageVRes <- ageVRes + scale_x_continuous("Age")
-ageVRes <- ageVRes + scale_y_continuous("Residuals")
-ageVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Race versus residuals
-raceVRes <- ggplot(data = voters, aes(race_white, contModelResiduals))
-raceVRes <- raceVRes + geom_point() + geom_smooth(method = "lm")
-raceVRes <- raceVRes + scale_x_continuous("race_white")
-raceVRes <- raceVRes + scale_y_continuous("Residuals")
-raceVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Check the standard diagnostic plots:
-plot(contModel3)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Do formal tests for 
-
-# Normality of residuals
-shapiro.test(contModelResiduals)
-
-```
-
-Placeholder text
-
-
-```{r}
-bptest(contModel3)
-
-```
-
-Placeholder text
-
-
-```{r}
-durbinWatsonTest(contModel3)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Treat the ideo as categorical
-voters$vconserv <- ifelse(voters$ideo5 == 5, 1, 0)
-voters$conserv <- ifelse(voters$ideo5 == 4, 1, 0)
-voters$moderate <- ifelse(voters$ideo5 == 3, 1, 0)
-voters$liberal <- ifelse(voters$ideo5 == 2, 1, 0)
-voters$vliberal <- ifelse(voters$ideo5 == 1, 1, 0)
-voters$vliberal <- ifelse(voters$ideo5 == 1, 1, 0)
-
-```
-
-Placeholder text
-
-
-```{r}
-catModel <- lm(diff ~ conserv + moderate + liberal + vliberal, data = voters)
-summary(catModel)
-
-```
-
-Placeholder text
-
-
-```{r}
-catModel2 <- lm(diff ~ conserv + moderate + liberal + vliberal + age, data = voters)
-summary(catModel2)
-
-```
-
-Placeholder text
-
-
-```{r}
-catModel3 <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = voters)
-summary(catModel3)
-
-```
-
-Placeholder text
-
-
-```{r}
-catModel4 <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white + female, data = voters)
-summary(catModel4)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Supposing we were going to use the categorical model, I would choose model 3
-# (Ideology + age + race_white)
-# Let's do some regression diagnositcs on this model:
-
-# First, get the residuals:
-catModelResiduals <- unname(catModel3$residuals)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Plot the predictor variables versus the residuals:
-
-# Conservative ideology versus residuals
-conserVRes <- ggplot(data = voters, aes(conserv, catModelResiduals))
-conserVRes <- conserVRes + geom_point() + geom_smooth(method = "lm")
-conserVRes <- conserVRes + scale_x_continuous("Conserative")
-conserVRes <- conserVRes + scale_y_continuous("Residuals")
-conserVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Moderate ideology versus residuals
-modVRes <- ggplot(data = voters, aes(moderate, catModelResiduals))
-modVRes <- modVRes + geom_point() + geom_smooth(method = "lm")
-modVRes <- modVRes + scale_x_continuous("Moderate")
-modVRes <- modVRes + scale_y_continuous("Residuals")
-modVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Liberal ideology versus residuals
-libVRes <- ggplot(data = voters, aes(liberal, catModelResiduals))
-libVRes <- libVRes + geom_point() + geom_smooth(method = "lm")
-libVRes <- libVRes + scale_x_continuous("Liberal")
-libVRes <- libVRes + scale_y_continuous("Residuals")
-libVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Very liberal ideology versus residuals
-vlibVRes <- ggplot(data = voters, aes(vliberal, catModelResiduals))
-vlibVRes <- vlibVRes + geom_point() + geom_smooth(method = "lm")
-vlibVRes <- vlibVRes + scale_x_continuous("Very Liberal")
-vlibVRes <- vlibVRes + scale_y_continuous("Residuals")
-vlibVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Age versus residuals
-ageVRes <- ggplot(data = voters, aes(age, catModelResiduals))
-ageVRes <- ageVRes + geom_point() + geom_smooth(method = "lm")
-ageVRes <- ageVRes + scale_x_continuous("Age")
-ageVRes <- ageVRes + scale_y_continuous("Residuals")
-ageVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Race versus residuals
-raceVRes <- ggplot(data = voters, aes(race_white, catModelResiduals))
-raceVRes <- raceVRes + geom_point() + geom_smooth(method = "lm")
-raceVRes <- raceVRes + scale_x_continuous("race_white")
-raceVRes <- raceVRes + scale_y_continuous("Residuals")
-raceVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Check the standard diagnostic plots:
-plot(catModel3)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Do formal tests for 
-
-# Normality of residuals
-shapiro.test(catModelResiduals)
-
-```
-
-Placeholder text
-
-
-```{r}
-bptest(catModel3)
-
-```
-
-Placeholder text
-
-
-```{r}
-durbinWatsonTest(catModel3)
-
-```
-
-Placeholder text
-
-
-```{r}
-
-# The final model
-
-modelNoPart <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = voters)
-coeftest(modelNoPart)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Including Partisanship
-
-```
-
-Placeholder text
-
-
-```{r}
-# Code a categoriccal partisanship variable
-voters$democrat <- ifelse(voters$pid3 == 1, 1, 0)
-voters$republican <- ifelse(voters$pid3 == 2, 1, 0)
-voters$independent <- ifelse(voters$pid3 == 3, 1, 0)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Add to the categorical model
-partModel <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white + democrat + republican, data = voters)
-coeftest(partModel)
-
-```
-
-Placeholder text
-
-
-```{r}
-waldtest(modelNoPart,partModel)
-
-```
-
-Placeholder text
-
-
-```{r}
-# First, get the residuals:
-partModelResiduals <- unname(partModel$residuals)
-
-# Plot the predictor variables versus the residuals:
-
-```
-
-Placeholder text
-
-
-```{r}
-# Conservative ideology versus residuals
-conserVRes <- ggplot(data = voters, aes(conserv, partModelResiduals))
-conserVRes <- conserVRes + geom_point() + geom_smooth(method = "lm")
-conserVRes <- conserVRes + scale_x_continuous("Conserative")
-conserVRes <- conserVRes + scale_y_continuous("Residuals")
-conserVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Moderate ideology versus residuals
-modVRes <- ggplot(data = voters, aes(moderate, partModelResiduals))
-modVRes <- modVRes + geom_point() + geom_smooth(method = "lm")
-modVRes <- modVRes + scale_x_continuous("Moderate")
-modVRes <- modVRes + scale_y_continuous("Residuals")
-modVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Liberal ideology versus residuals
-libVRes <- ggplot(data = voters, aes(liberal, partModelResiduals))
-libVRes <- libVRes + geom_point() + geom_smooth(method = "lm")
-libVRes <- libVRes + scale_x_continuous("Liberal")
-libVRes <- libVRes + scale_y_continuous("Residuals")
-libVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Very liberal ideology versus residuals
-vlibVRes <- ggplot(data = voters, aes(vliberal, partModelResiduals))
-vlibVRes <- vlibVRes + geom_point() + geom_smooth(method = "lm")
-vlibVRes <- vlibVRes + scale_x_continuous("Very Liberal")
-vlibVRes <- vlibVRes + scale_y_continuous("Residuals")
-vlibVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Age versus residuals
-ageVRes <- ggplot(data = voters, aes(age, partModelResiduals))
-ageVRes <- ageVRes + geom_point() + geom_smooth(method = "lm")
-ageVRes <- ageVRes + scale_x_continuous("Age")
-ageVRes <- ageVRes + scale_y_continuous("Residuals")
-ageVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Race versus residuals
-raceVRes <- ggplot(data = voters, aes(race_white, partModelResiduals))
-raceVRes <- raceVRes + geom_point() + geom_smooth(method = "lm")
-raceVRes <- raceVRes + scale_x_continuous("race_white")
-raceVRes <- raceVRes + scale_y_continuous("Residuals")
-raceVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Democratic partisanship versus residuals
-demVRes <- ggplot(data = voters, aes(democrat, partModelResiduals))
-demVRes <- demVRes + geom_point() + geom_smooth(method = "lm")
-demVRes <- demVRes + scale_x_continuous("Democrat")
-demVRes <- demVRes + scale_y_continuous("Residuals")
-demVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Republican partisanship versus residuals
-repVRes <- ggplot(data = voters, aes(republican, partModelResiduals))
-repVRes <- repVRes + geom_point() + geom_smooth(method = "lm")
-repVRes <- repVRes + scale_x_continuous("Republican")
-repVRes <- repVRes + scale_y_continuous("Residuals")
-repVRes
-
-```
-
-Placeholder text
-
-
-```{r}
-# Check the standard diagnostic plots:
-plot(partModel)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Do formal tests for:
-
-# Normality of residuals
-shapiro.test(partModelResiduals)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Heteroscedasticity of residuals
-bptest(partModel)
-
-```
-
-Placeholder text
-
-
-```{r}
-# Autocorrelation of residuals
-durbinWatsonTest(partModel)
-```
-
-Placeholder text
-
-Slopes:
-
-```{r}
-# Add to the categorical model
-democrats <- voters[voters$democrat == 1,]
-republicans <- voters[voters$republican == 1,]
-
-demoModel <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = democrats)
-coeftest(demoModel)
+# Test for Heteroskedasticity
+bptest(model4)
 
 ```
 
 ```{r}
-repubModel <- lm(diff ~ conserv + moderate + liberal + vliberal + age + race_white, data = republicans)
-coeftest(repubModel)
+
+scatterplot(model4$fitted.values, model4$residuals,
+smoother = loessLine, cex = 0.5, pch = 19,
+smoother.args = list(lty = 1, lwd = 5))
+
 ```
 
-```{r}
-scatterplot(voters$democrat, voters$ideo5)
+The model violates the normality assumption of the error term (plots and formal Shapiro test results below).  With large sample sizes (such as this) small departures from normality does not compromise the statistical tests that assume normality (such asthe t test).  F-test and related procedures are also robust to the normality assumption.  The departure from normality here is large enough that it may be worth recaluculating standard errors via a bootstrapping method.    
+
+```{r echo=FALSE}
+
+hist(model4$residuals)
+
+qqnorm(model4$residuals)
+qqline(model4$residuals)
+
+# Test For Normality of Residuals
+shapiro.test(model4$residuals)
+
 ```
+
+Finally, the OLS model assumes that the data are independent draws from the population.  A formal Durbin-Watson test for autocorrelation of the residuals gives us confidence that the errors are not correlated with each other.  
+
+```{r}
+# Test for autocorrelation of residuals
+durbinWatsonTest(model4)
+
+```
+
+
+
