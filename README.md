@@ -4,7 +4,7 @@ _Jessica Sanders_
 
 See a rendered HTML of this voter modeling project here:  https://jd-sanders.github.io/PartisanshipRegressions/
 
-Bernie Sanders challenged Hillary Clinton in the Presidential primary elections within the Democratic Party in 2016. These two candidates competed to represent the party in the general Presidential election. The conventional wisdom was that voters who supported Bernie Sanders were more ideologically liberal than those who supported Hillary Clinton. That narrative was complicated by suggestions that Bernie Sanders supporters were also somewhat likely to vote for Donald Trump in the general election.
+Bernie Sanders challenged Hillary Clinton in the presidential primary elections within the Democratic Party in 2016. The conventional wisdom was that voters who supported Bernie Sanders were more ideologically liberal than those who supported Hillary Clinton. That narrative was complicated by suggestions that Bernie Sanders supporters were also somewhat likely to vote for Donald Trump in the general election.
 
 I'm interested in discerning the relationship between ideology and support for Bernie Sanders. Specifically, do the data from voter polls support the hypothesis that Sanders supporters were more liberal than Clinton supporters? If so, does that characterization hold across demographic subgroups? This document conducts data analysis and a regression model to address this question.
 
